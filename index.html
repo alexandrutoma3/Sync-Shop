@@ -171,6 +171,9 @@
   }
   .item.checked .check{ background:var(--accent); border-color:var(--accent); }
   .del{ background:none; border:none; color:var(--ink-soft); font-size:1rem; cursor:pointer; padding:4px 6px; flex-shrink:0; border-radius:8px; transition:all .15s ease; }
+  .edit-btn{ background:none; border:none; color:var(--ink-soft); font-size:0.95rem; cursor:pointer; padding:4px 6px; flex-shrink:0; border-radius:8px; transition:all .15s ease; }
+  .edit-btn:hover{ color:var(--accent); background:var(--accent-soft); }
+  .entry-actions{ display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
   .del:hover{ color:var(--danger); background:var(--danger-soft); }
   .empty{ text-align:center; padding:40px 10px; color:var(--ink-soft); font-size:0.95rem; }
   .list-actions{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:16px; }
@@ -585,6 +588,52 @@
 
 <!-- SETTINGS OVERLAY -->
 <!-- GROUP SWITCHER OVERLAY -->
+<!-- EDIT OVERLAY -->
+<div class="overlay" id="edit-overlay">
+  <div class="overlay-panel card">
+    <h3 id="edit-overlay-title" style="margin:0 0 14px; font-size:1.05rem;">Edit</h3>
+
+    <div id="edit-fields-shopping" style="display:none;">
+      <input type="text" id="edit-item-name" placeholder="Item name">
+      <div style="height:8px;"></div>
+      <input type="text" id="edit-item-qty" placeholder="Quantity">
+      <div style="height:8px;"></div>
+      <input type="text" id="edit-item-note" placeholder="Notes">
+      <div style="height:10px;"></div>
+      <div class="store-picker-label">Store</div>
+      <div class="store-picker-grid" id="edit-store-picker-grid"></div>
+      <input type="hidden" id="edit-item-store" value="">
+    </div>
+
+    <div id="edit-fields-event" style="display:none;">
+      <input type="text" id="edit-event-title" placeholder="Event title">
+      <div style="height:8px;"></div>
+      <div class="row">
+        <input type="date" id="edit-event-date">
+        <input type="time" id="edit-event-time">
+      </div>
+      <div style="height:8px;"></div>
+      <textarea id="edit-event-note" placeholder="Note (optional)" rows="2"></textarea>
+    </div>
+
+    <div id="edit-fields-reminder" style="display:none;">
+      <input type="text" id="edit-reminder-text" placeholder="What should nobody forget?">
+      <div style="height:8px;"></div>
+      <input type="date" id="edit-reminder-due">
+      <div style="height:10px;"></div>
+      <div class="store-picker-label">Assign to</div>
+      <div class="store-picker-grid" id="edit-assignee-picker-grid"></div>
+      <input type="hidden" id="edit-reminder-assignee" value="">
+    </div>
+
+    <div id="edit-error" style="font-size:0.8rem; color:var(--danger); margin-top:10px; min-height:1.1em;"></div>
+    <div style="display:flex; gap:8px; margin-top:14px;">
+      <button class="btn ghost" id="cancel-edit-btn" style="flex:1;">Cancel</button>
+      <button class="btn" id="save-edit-btn" style="flex:1;">Save changes</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="group-switch-overlay">
   <div class="overlay-panel card">
     <h3 style="margin:0 0 6px; font-size:1.05rem;">Your groups</h3>
@@ -678,7 +727,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.21";
+const APP_VERSION = "1.22";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -1340,9 +1389,9 @@ document.getElementById('copy-invite-btn').addEventListener('click', ()=>{
 });
 
 /* ============ SHOPPING ============ */
-function renderStorePicker(){
-  const grid = document.getElementById('store-picker-grid');
-  const current = document.getElementById('item-store').value;
+function renderStorePickerInto(gridId, inputId){
+  const grid = document.getElementById(gridId);
+  const current = document.getElementById(inputId).value;
   const options = [
     { name:'', label:'No store', badge:`<span class="store-badge" style="background:#B8BCC4">–</span>` },
     ...STORES.map(s => ({ name:s, label:s, badge: storeBadgeHtml(s) }))
@@ -1354,11 +1403,18 @@ function renderStorePicker(){
     </div>
   `).join('');
 }
+function renderStorePicker(){ renderStorePickerInto('store-picker-grid', 'item-store'); }
 document.getElementById('store-picker-grid').addEventListener('click', (e)=>{
   const t = e.target.closest('.store-option');
   if(!t) return;
   document.getElementById('item-store').value = t.dataset.store;
   renderStorePicker();
+});
+document.getElementById('edit-store-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('edit-item-store').value = t.dataset.store;
+  renderStorePickerInto('edit-store-picker-grid', 'edit-item-store');
 });
 
 function renderStoreFilters(){
@@ -1451,7 +1507,10 @@ function renderShopping(){
               </div>
               ${it.addedBy ? `<div class="added-by">Added by ${escapeHtml(it.addedBy)}</div>` : ''}
             </div>
-            <button class="del" data-action="delete-item" data-id="${it.id}">✕</button>
+            <div class="entry-actions">
+              <button class="edit-btn" data-action="edit-item" data-id="${it.id}">✎</button>
+              <button class="del" data-action="delete-item" data-id="${it.id}">✕</button>
+            </div>
           </div>
         `).join('')}
       </div>
@@ -1494,6 +1553,8 @@ document.getElementById('shopping-list').addEventListener('click', async (e)=>{
     if(item) await db.ref(`families/${currentFamilyId}/shopping/${id}/checked`).set(!item.checked);
   } else if(t.dataset.action === 'delete-item'){
     await db.ref(`families/${currentFamilyId}/shopping/${id}`).remove();
+  } else if(t.dataset.action === 'edit-item'){
+    openEditModal('shopping', id);
   }
 });
 
@@ -1609,7 +1670,10 @@ function renderDayPanel(){
             ${ev.note?`<div class="event-note">${escapeHtml(ev.note)}</div>`:''}
             ${ev.addedBy ? `<div class="added-by">Added by ${escapeHtml(ev.addedBy)}</div>` : ''}
           </div>
-          <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
+          <div class="entry-actions">
+            <button class="edit-btn" data-action="edit-event" data-id="${ev.id}">✎</button>
+            <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
+          </div>
         </div>
       `).join('')}
     </div>
@@ -1662,7 +1726,10 @@ function renderEventsList(){
         </div>
         <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
           <div class="event-date-badge">${MONTHS[parseInt(m)-1].slice(0,3)} ${parseInt(d)}</div>
-          <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
+          <div class="entry-actions" style="flex-direction:row;">
+            <button class="edit-btn" data-action="edit-event" data-id="${ev.id}">✎</button>
+            <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
+          </div>
         </div>
       </div>
     `;
@@ -1670,9 +1737,13 @@ function renderEventsList(){
 }
 
 document.addEventListener('click', async (e)=>{
-  const t = e.target.closest('[data-action="delete-event"]');
-  if(!t) return;
-  await db.ref(`families/${currentFamilyId}/events/${t.dataset.id}`).remove();
+  const delBtn = e.target.closest('[data-action="delete-event"]');
+  const editBtn = e.target.closest('[data-action="edit-event"]');
+  if(delBtn){
+    await db.ref(`families/${currentFamilyId}/events/${delBtn.dataset.id}`).remove();
+  } else if(editBtn){
+    openEditModal('event', editBtn.dataset.id);
+  }
 });
 
 document.getElementById('add-event-btn').addEventListener('click', async ()=>{
@@ -1715,10 +1786,10 @@ function remindersArray(){
   return Object.entries(data.reminders || {}).map(([id, r]) => ({ id, ...r }));
 }
 
-function renderAssigneePicker(){
-  const grid = document.getElementById('assignee-picker-grid');
+function renderAssigneePickerInto(gridId, inputId){
+  const grid = document.getElementById(gridId);
   if(!currentFamilyData || !currentFamilyData.members){ grid.innerHTML = ''; return; }
-  const current = document.getElementById('reminder-assignee').value;
+  const current = document.getElementById(inputId).value;
   const members = Object.entries(currentFamilyData.members);
   const options = [
     { uid:'', label:'Anyone', badge:`<span class="store-badge" style="background:#B8BCC4">–</span>` },
@@ -1735,11 +1806,101 @@ function renderAssigneePicker(){
     </div>
   `).join('');
 }
+function renderAssigneePicker(){ renderAssigneePickerInto('assignee-picker-grid', 'reminder-assignee'); }
 document.getElementById('assignee-picker-grid').addEventListener('click', (e)=>{
   const t = e.target.closest('.store-option');
   if(!t) return;
   document.getElementById('reminder-assignee').value = t.dataset.assignee;
   renderAssigneePicker();
+});
+document.getElementById('edit-assignee-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('edit-reminder-assignee').value = t.dataset.assignee;
+  renderAssigneePickerInto('edit-assignee-picker-grid', 'edit-reminder-assignee');
+});
+
+/* ============ EDIT MODAL ============ */
+let editContext = null;
+
+function openEditModal(type, id){
+  editContext = { type, id };
+  document.getElementById('edit-error').textContent = '';
+  document.getElementById('edit-fields-shopping').style.display = 'none';
+  document.getElementById('edit-fields-event').style.display = 'none';
+  document.getElementById('edit-fields-reminder').style.display = 'none';
+
+  if(type === 'shopping'){
+    const it = data.shopping[id];
+    if(!it) return;
+    document.getElementById('edit-overlay-title').textContent = 'Edit item';
+    document.getElementById('edit-fields-shopping').style.display = 'block';
+    document.getElementById('edit-item-name').value = it.name || '';
+    document.getElementById('edit-item-qty').value = it.qty || '';
+    document.getElementById('edit-item-note').value = it.note || '';
+    document.getElementById('edit-item-store').value = it.store || '';
+    renderStorePickerInto('edit-store-picker-grid', 'edit-item-store');
+  } else if(type === 'event'){
+    const ev = data.events[id];
+    if(!ev) return;
+    document.getElementById('edit-overlay-title').textContent = 'Edit event';
+    document.getElementById('edit-fields-event').style.display = 'block';
+    document.getElementById('edit-event-title').value = ev.title || '';
+    document.getElementById('edit-event-date').value = ev.date || '';
+    document.getElementById('edit-event-time').value = ev.time || '';
+    document.getElementById('edit-event-note').value = ev.note || '';
+  } else if(type === 'reminder'){
+    const r = data.reminders[id];
+    if(!r) return;
+    document.getElementById('edit-overlay-title').textContent = 'Edit reminder';
+    document.getElementById('edit-fields-reminder').style.display = 'block';
+    document.getElementById('edit-reminder-text').value = r.text || '';
+    document.getElementById('edit-reminder-due').value = r.dueDate || '';
+    document.getElementById('edit-reminder-assignee').value = r.assignedToUid || '';
+    renderAssigneePickerInto('edit-assignee-picker-grid', 'edit-reminder-assignee');
+  }
+  document.getElementById('edit-overlay').classList.add('show');
+}
+function closeEditModal(){
+  document.getElementById('edit-overlay').classList.remove('show');
+  editContext = null;
+}
+document.getElementById('cancel-edit-btn').addEventListener('click', closeEditModal);
+
+document.getElementById('save-edit-btn').addEventListener('click', async ()=>{
+  if(!editContext) return;
+  const { type, id } = editContext;
+  const errorEl = document.getElementById('edit-error');
+
+  if(type === 'shopping'){
+    const name = document.getElementById('edit-item-name').value.trim();
+    if(!name){ errorEl.textContent = 'Please enter an item name.'; return; }
+    const qty = document.getElementById('edit-item-qty').value.trim();
+    const note = document.getElementById('edit-item-note').value.trim();
+    const store = document.getElementById('edit-item-store').value;
+    const existing = data.shopping[id] || {};
+    const category = guessCategory(name) || existing.category || 'Other';
+    const emoji = guessEmoji(name, category);
+    await db.ref(`families/${currentFamilyId}/shopping/${id}`).update({ name, qty, note, store, category, emoji });
+  } else if(type === 'event'){
+    const title = document.getElementById('edit-event-title').value.trim();
+    const date = document.getElementById('edit-event-date').value;
+    if(!title || !date){ errorEl.textContent = 'Please enter a title and date.'; return; }
+    const time = document.getElementById('edit-event-time').value;
+    const note = document.getElementById('edit-event-note').value.trim();
+    await db.ref(`families/${currentFamilyId}/events/${id}`).update({ title, date, time, note });
+  } else if(type === 'reminder'){
+    const text = document.getElementById('edit-reminder-text').value.trim();
+    if(!text){ errorEl.textContent = 'Please enter a reminder.'; return; }
+    const dueDate = document.getElementById('edit-reminder-due').value;
+    const assigneeUid = document.getElementById('edit-reminder-assignee').value;
+    let assignedToName = '';
+    if(assigneeUid && currentFamilyData && currentFamilyData.members && currentFamilyData.members[assigneeUid]){
+      assignedToName = currentFamilyData.members[assigneeUid].name || '';
+    }
+    await db.ref(`families/${currentFamilyId}/reminders/${id}`).update({ text, dueDate, assignedToUid: assigneeUid, assignedToName });
+  }
+  closeEditModal();
 });
 
 function renderReminderFilters(){
@@ -1809,7 +1970,10 @@ function renderReminders(){
           <div class="reminder-meta-row">${dueBadge}${forBadge}</div>
           ${r.addedBy ? `<div class="added-by">Added by ${escapeHtml(r.addedBy)}</div>` : ''}
         </div>
-        <button class="del" data-action="delete-reminder" data-id="${r.id}">✕</button>
+        <div class="entry-actions">
+          <button class="edit-btn" data-action="edit-reminder" data-id="${r.id}">✎</button>
+          <button class="del" data-action="delete-reminder" data-id="${r.id}">✕</button>
+        </div>
       </div>
     `;
   }
@@ -1855,6 +2019,8 @@ document.getElementById('reminders-list').addEventListener('click', async (e)=>{
     if(r) await db.ref(`families/${currentFamilyId}/reminders/${id}/checked`).set(!r.checked);
   } else if(t.dataset.action === 'delete-reminder'){
     await db.ref(`families/${currentFamilyId}/reminders/${id}`).remove();
+  } else if(t.dataset.action === 'edit-reminder'){
+    openEditModal('reminder', id);
   }
 });
 
