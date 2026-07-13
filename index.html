@@ -230,22 +230,30 @@
   .month-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
   .month-nav h2{ font-size:1.1rem; font-weight:700; margin:0; letter-spacing:-0.01em; }
   .month-nav button{ background:var(--surface-alt); border:none; color:var(--ink); font-weight:700; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:1rem; }
-  .grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:16px; }
-  .grid .dow{ text-align:center; font-size:0.68rem; font-weight:600; color:var(--ink-soft); padding-bottom:6px; }
+  .grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:16px; }
+  .grid .dow{ text-align:center; font-size:0.64rem; font-weight:700; color:var(--ink-soft); padding-bottom:6px; }
+  .grid .dow.weekend{ color:#C1573D; }
   .day{
-    aspect-ratio:1; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    font-size:0.85rem; cursor:pointer; position:relative; background:var(--surface); border:1px solid var(--border); transition:all .12s ease;
+    min-height:64px; border-radius:10px; display:flex; flex-direction:column; align-items:flex-start;
+    padding:4px 3px; gap:2px; font-size:0.72rem; font-weight:600; cursor:pointer; position:relative;
+    background:var(--surface); border:1px solid var(--border); transition:all .12s ease; overflow:hidden;
   }
   .day:hover{ border-color:var(--accent); }
   .day.empty-day{ visibility:hidden; }
-  .day.today{ border-color:var(--accent); color:var(--accent); font-weight:700; }
-  .day.selected{ background:var(--accent); color:#fff; border-color:var(--accent); }
-  .day .dot{ width:5px; height:5px; border-radius:50%; background:var(--teal); position:absolute; bottom:6px; }
-  .day.selected .dot{ background:#fff; }
+  .day.weekend .day-num{ color:#C1573D; }
+  .day.today{ border-color:var(--accent); background:var(--accent-soft); }
+  .day.today .day-num{ color:var(--accent); font-weight:800; }
+  .day.selected{ border-color:var(--accent); border-width:2px; }
+  .day-num{ color:var(--ink); line-height:1.2; }
+  .day-event-bar{
+    width:100%; font-size:0.56rem; font-weight:700; color:#fff; border-radius:4px;
+    padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.5;
+  }
+  .day-event-more{ font-size:0.56rem; font-weight:700; color:var(--ink-soft); }
   .day-panel{ margin-bottom:18px; }
   .day-panel h3{ font-size:1rem; font-weight:700; margin:0 0 10px; }
   .event-card{
-    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:var(--radius-sm);
     padding:12px 14px; margin-bottom:8px; display:flex; justify-content:space-between; gap:8px; align-items:flex-start;
   }
   .event-card.past{ opacity:0.45; }
@@ -619,6 +627,9 @@
       <input type="time" id="ev-time">
     </div>
     <textarea id="ev-note" placeholder="Note (optional)" rows="2"></textarea>
+    <div class="store-picker-label" style="margin-top:8px;">Category</div>
+    <div class="store-picker-grid" id="ev-category-picker-grid"></div>
+    <input type="hidden" id="ev-category" value="Other">
     <div style="display:flex; gap:8px; margin-top:14px;">
       <button class="btn ghost" id="cancel-add-event-btn" style="flex:1;">Cancel</button>
       <button class="btn" id="add-event-btn" style="flex:1;">+ Add event</button>
@@ -681,6 +692,9 @@
       </div>
       <div style="height:8px;"></div>
       <textarea id="edit-event-note" placeholder="Note (optional)" rows="2"></textarea>
+      <div class="store-picker-label" style="margin-top:8px;">Category</div>
+      <div class="store-picker-grid" id="edit-event-category-picker-grid"></div>
+      <input type="hidden" id="edit-event-category" value="Other">
     </div>
 
     <div id="edit-fields-reminder" style="display:none;">
@@ -794,7 +808,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.30";
+const APP_VERSION = "1.31";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -834,6 +848,16 @@ const CATEGORIES = {
   'Cleaning': { emoji:'🧽', color:'#A78BFA' },
   'Pantry': { emoji:'🧂', color:'#FB923C' },
   'Other': { emoji:'🛍️', color:'#94A3B8' }
+};
+
+const EVENT_CATEGORIES = {
+  'Family': { color:'#4F46E5' },
+  'Work': { color:'#0B1F4D' },
+  'School': { color:'#A78BFA' },
+  'Health': { color:'#F59E0B' },
+  'Travel': { color:'#0D9C94' },
+  'Birthday': { color:'#EC4899' },
+  'Other': { color:'#94A3B8' }
 };
 
 const KEYWORD_EMOJI = [
@@ -1428,6 +1452,7 @@ function openAddModal(){
     document.getElementById('reminder-text').focus();
   } else if(activeTab === 'calendar'){
     document.getElementById('ev-date').value = document.getElementById('ev-date').value || todayStr();
+    renderEventCategoryPickerInto('ev-category-picker-grid', 'ev-category');
     document.getElementById('add-event-overlay').classList.add('show');
     document.getElementById('ev-title').focus();
   }
@@ -1510,6 +1535,32 @@ document.getElementById('edit-store-picker-grid').addEventListener('click', (e)=
   if(!t) return;
   document.getElementById('edit-item-store').value = t.dataset.store;
   renderStorePickerInto('edit-store-picker-grid', 'edit-item-store');
+});
+
+function renderEventCategoryPickerInto(gridId, inputId){
+  const grid = document.getElementById(gridId);
+  const current = document.getElementById(inputId).value;
+  grid.innerHTML = Object.keys(EVENT_CATEGORIES).map(cat => {
+    const color = EVENT_CATEGORIES[cat].color;
+    return `
+      <div class="store-option ${current===cat?'selected':''}" data-cat="${cat}">
+        <span class="store-badge" style="background:${color}">&nbsp;</span>
+        <span>${cat}</span>
+      </div>
+    `;
+  }).join('');
+}
+document.getElementById('ev-category-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('ev-category').value = t.dataset.cat;
+  renderEventCategoryPickerInto('ev-category-picker-grid', 'ev-category');
+});
+document.getElementById('edit-event-category-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('edit-event-category').value = t.dataset.cat;
+  renderEventCategoryPickerInto('edit-event-category-picker-grid', 'edit-event-category');
 });
 
 function renderStoreFilters(){
@@ -1786,16 +1837,27 @@ function renderMonthGrid(){
   const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 0).getDate();
   const evs = eventsArray();
 
-  let html = DOW.map(d=>`<div class="dow">${d}</div>`).join('');
+  let html = DOW.map((d,i)=>`<div class="dow ${i>=5?'weekend':''}">${d}</div>`).join('');
   for(let i=0;i<startDow;i++) html += `<div class="day empty-day"></div>`;
   for(let day=1; day<=daysInMonth; day++){
     const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
     const ds = fmtDate(dateObj);
-    const hasEvents = evs.some(ev=>ev.date===ds);
+    const dowIndex = (dateObj.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+    const isWeekend = dowIndex >= 5;
+    const dayEvents = evs.filter(ev=>ev.date===ds).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
     const isToday = ds === todayStr();
     const isSelected = ds === selectedDate;
-    html += `<div class="day ${isToday?'today':''} ${isSelected?'selected':''}" data-date="${ds}">
-      ${day}${hasEvents?'<span class="dot"></span>':''}
+    const maxBars = 2;
+    const visibleEvents = dayEvents.slice(0, maxBars);
+    const extraCount = dayEvents.length - visibleEvents.length;
+    const barsHtml = visibleEvents.map(ev=>{
+      const color = (EVENT_CATEGORIES[ev.category] && EVENT_CATEGORIES[ev.category].color) || EVENT_CATEGORIES['Other'].color;
+      return `<div class="day-event-bar" style="background:${color}">${escapeHtml(ev.title)}</div>`;
+    }).join('');
+    const moreHtml = extraCount > 0 ? `<div class="day-event-more">+${extraCount} more</div>` : '';
+    html += `<div class="day ${isToday?'today':''} ${isSelected?'selected':''} ${isWeekend?'weekend':''}" data-date="${ds}">
+      <div class="day-num">${day}</div>
+      ${barsHtml}${moreHtml}
     </div>`;
   }
   grid.innerHTML = html;
@@ -1822,7 +1884,7 @@ function renderDayPanel(){
     <div id="qadd-events">
       ${evs.length===0 ? `<div class="empty" style="padding:8px 0;font-size:0.85rem;">Nothing scheduled for this day.</div>` :
       evs.map(ev=>`
-        <div class="event-card">
+        <div class="event-card" style="border-left-color:${(EVENT_CATEGORIES[ev.category] && EVENT_CATEGORIES[ev.category].color) || EVENT_CATEGORIES['Other'].color}">
           <div>
             ${ev.time?`<div class="event-time">${ev.time}</div>`:''}
             <div class="event-title">${escapeHtml(ev.title)}</div>
@@ -1843,7 +1905,7 @@ function renderDayPanel(){
     const title = titleEl.value.trim();
     if(!title) return;
     await db.ref(`families/${currentFamilyId}/events`).push({
-      date: selectedDate, time: timeEl.value, title, note:'',
+      date: selectedDate, time: timeEl.value, title, note:'', category:'Other',
       addedBy: currentDisplayName(), addedByUid: currentUser.uid, createdAt: Date.now()
     });
   });
@@ -1876,7 +1938,7 @@ function renderEventsList(){
     const [y,m,d] = ev.date.split('-');
     const isPast = ev.date < today;
     return `
-      <div class="event-card ${isPast?'past':''}">
+      <div class="event-card ${isPast?'past':''}" style="border-left-color:${(EVENT_CATEGORIES[ev.category] && EVENT_CATEGORIES[ev.category].color) || EVENT_CATEGORIES['Other'].color}">
         <div>
           ${ev.time?`<div class="event-time">${ev.time}</div>`:''}
           <div class="event-title">${escapeHtml(ev.title)}</div>
@@ -1910,14 +1972,16 @@ document.getElementById('add-event-btn').addEventListener('click', async ()=>{
   const dateEl = document.getElementById('ev-date');
   const timeEl = document.getElementById('ev-time');
   const noteEl = document.getElementById('ev-note');
+  const categoryEl = document.getElementById('ev-category');
   const title = titleEl.value.trim();
   const date = dateEl.value;
   if(!title || !date) return;
   await db.ref(`families/${currentFamilyId}/events`).push({
-    date, time: timeEl.value, title, note: noteEl.value.trim(),
+    date, time: timeEl.value, title, note: noteEl.value.trim(), category: categoryEl.value,
     addedBy: currentDisplayName(), addedByUid: currentUser.uid, createdAt: Date.now()
   });
-  titleEl.value=''; dateEl.value=''; timeEl.value=''; noteEl.value='';
+  titleEl.value=''; dateEl.value=''; timeEl.value=''; noteEl.value=''; categoryEl.value='Other';
+  renderEventCategoryPickerInto('ev-category-picker-grid', 'ev-category');
   document.getElementById('add-event-overlay').classList.remove('show');
 });
 
@@ -2026,6 +2090,8 @@ function openEditModal(type, id){
     document.getElementById('edit-event-date').value = ev.date || '';
     document.getElementById('edit-event-time').value = ev.time || '';
     document.getElementById('edit-event-note').value = ev.note || '';
+    document.getElementById('edit-event-category').value = ev.category || 'Other';
+    renderEventCategoryPickerInto('edit-event-category-picker-grid', 'edit-event-category');
   } else if(type === 'reminder'){
     const r = data.reminders[id];
     if(!r) return;
@@ -2070,7 +2136,8 @@ document.getElementById('save-edit-btn').addEventListener('click', async ()=>{
     if(!title || !date){ errorEl.textContent = 'Please enter a title and date.'; return; }
     const time = document.getElementById('edit-event-time').value;
     const note = document.getElementById('edit-event-note').value.trim();
-    await db.ref(`families/${currentFamilyId}/events/${id}`).update({ title, date, time, note });
+    const category = document.getElementById('edit-event-category').value;
+    await db.ref(`families/${currentFamilyId}/events/${id}`).update({ title, date, time, note, category });
   } else if(type === 'reminder'){
     const text = document.getElementById('edit-reminder-text').value.trim();
     if(!text){ errorEl.textContent = 'Please enter a reminder.'; return; }
