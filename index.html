@@ -523,10 +523,15 @@
         <div class="store-picker-label">Store</div>
         <div class="store-picker-grid" id="store-picker-grid"></div>
         <input type="hidden" id="item-store" value="">
+        <div class="store-picker-label">Assign to</div>
+        <div class="store-picker-grid" id="item-assignee-picker-grid"></div>
+        <input type="hidden" id="item-assignee" value="">
         <button class="btn" id="add-item-btn">+ Add to list</button>
       </div>
+      <div class="store-picker-label" style="margin-bottom:6px;">Filter by store</div>
       <div class="store-filters" id="store-filters"></div>
       <div id="member-filters-wrap" style="border-top:1px solid var(--border); margin-top:6px; padding-top:10px;">
+        <div class="store-picker-label" style="margin-bottom:6px;">Filter by person</div>
         <div class="store-filters" id="member-filters"></div>
       </div>
       <div style="border-top:1px solid var(--border); margin-top:10px; padding-top:14px; padding-bottom:4px; display:flex; justify-content:center;">
@@ -574,7 +579,10 @@
         <input type="hidden" id="reminder-assignee" value="">
         <button class="btn" id="add-reminder-btn" style="background:#F59E0B;">+ Add reminder</button>
       </div>
-      <div class="store-filters" id="reminder-filters"></div>
+      <div id="reminder-filters-wrap">
+        <div class="store-picker-label" style="margin-bottom:6px;">Filter by person</div>
+        <div class="store-filters" id="reminder-filters"></div>
+      </div>
       <div style="border-top:1px solid var(--border); margin-top:10px; padding-top:14px; padding-bottom:4px; display:flex; justify-content:center;">
         <button class="btn ghost small" id="clear-reminders-btn">Clear completed</button>
       </div>
@@ -603,6 +611,9 @@
       <div class="store-picker-label">Store</div>
       <div class="store-picker-grid" id="edit-store-picker-grid"></div>
       <input type="hidden" id="edit-item-store" value="">
+      <div class="store-picker-label">Assign to</div>
+      <div class="store-picker-grid" id="edit-item-assignee-picker-grid"></div>
+      <input type="hidden" id="edit-item-assignee" value="">
     </div>
 
     <div id="edit-fields-event" style="display:none;">
@@ -727,7 +738,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.22";
+const APP_VERSION = "1.24";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -1287,6 +1298,7 @@ function attachFamilyListener(){
     renderMembersList();
     renderMemberFilters();
     renderAssigneePicker();
+    renderItemAssigneePicker();
     renderReminderFilters();
   }, async (err)=>{
     console.error('Sync error', err);
@@ -1473,7 +1485,7 @@ function renderShopping(){
   const container = document.getElementById('shopping-list');
   const all = shoppingArray();
   let filtered = activeStoreFilter === 'all' ? all : all.filter(it => it.store === activeStoreFilter);
-  filtered = activeMemberFilter === 'all' ? filtered : filtered.filter(it => it.addedByUid === activeMemberFilter);
+  filtered = activeMemberFilter === 'all' ? filtered : filtered.filter(it => it.assignedToUid === activeMemberFilter);
   if(all.length === 0){
     container.innerHTML = `<div class="empty">Your list is empty.<br>Add your first item above.</div>`;
     return;
@@ -1504,6 +1516,7 @@ function renderShopping(){
               ${it.note ? `<div class="item-note-text">${escapeHtml(it.note)}</div>` : ''}
               <div class="item-meta-row">
                 ${it.store ? `<div class="item-store">${storeBadgeHtml(it.store)}${escapeHtml(it.store)}</div>` : ''}
+                ${it.assignedToName ? `<div class="reminder-badge" style="padding:7px 14px; font-size:0.85rem;">Assigned to: ${escapeHtml(it.assignedToName)}</div>` : ''}
               </div>
               ${it.addedBy ? `<div class="added-by">Added by ${escapeHtml(it.addedBy)}</div>` : ''}
             </div>
@@ -1525,21 +1538,29 @@ document.getElementById('add-item-btn').addEventListener('click', async ()=>{
   const noteEl = document.getElementById('item-note');
   const catEl = document.getElementById('item-cat');
   const storeEl = document.getElementById('item-store');
+  const assigneeEl = document.getElementById('item-assignee');
   const name = nameEl.value.trim();
   if(!name) return;
   const category = catEl.value;
   const store = storeEl.value;
+  const assigneeUid = assigneeEl.value;
+  let assignedToName = '';
+  if(assigneeUid && currentFamilyData && currentFamilyData.members && currentFamilyData.members[assigneeUid]){
+    assignedToName = currentFamilyData.members[assigneeUid].name || '';
+  }
   const newItem = {
     name, qty: qtyEl.value.trim(), note: noteEl.value.trim(), category, store,
     emoji: guessEmoji(name, category), checked:false,
+    assignedToUid: assigneeUid, assignedToName,
     addedBy: currentDisplayName(), addedByUid: currentUser.uid,
     createdAt: Date.now()
   };
   await db.ref(`families/${currentFamilyId}/shopping`).push(newItem);
   await rememberProduct(name, category, store);
-  nameEl.value=''; qtyEl.value=''; storeEl.value=''; noteEl.value='';
+  nameEl.value=''; qtyEl.value=''; storeEl.value=''; noteEl.value=''; assigneeEl.value='';
   document.getElementById('item-cat').value = 'Other';
   renderStorePicker();
+  renderItemAssigneePicker();
   document.getElementById('suggestions-dropdown').classList.remove('show');
   nameEl.blur();
 });
@@ -1807,6 +1828,19 @@ function renderAssigneePickerInto(gridId, inputId){
   `).join('');
 }
 function renderAssigneePicker(){ renderAssigneePickerInto('assignee-picker-grid', 'reminder-assignee'); }
+function renderItemAssigneePicker(){ renderAssigneePickerInto('item-assignee-picker-grid', 'item-assignee'); }
+document.getElementById('item-assignee-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('item-assignee').value = t.dataset.assignee;
+  renderItemAssigneePicker();
+});
+document.getElementById('edit-item-assignee-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('edit-item-assignee').value = t.dataset.assignee;
+  renderAssigneePickerInto('edit-item-assignee-picker-grid', 'edit-item-assignee');
+});
 document.getElementById('assignee-picker-grid').addEventListener('click', (e)=>{
   const t = e.target.closest('.store-option');
   if(!t) return;
@@ -1840,6 +1874,8 @@ function openEditModal(type, id){
     document.getElementById('edit-item-note').value = it.note || '';
     document.getElementById('edit-item-store').value = it.store || '';
     renderStorePickerInto('edit-store-picker-grid', 'edit-item-store');
+    document.getElementById('edit-item-assignee').value = it.assignedToUid || '';
+    renderAssigneePickerInto('edit-item-assignee-picker-grid', 'edit-item-assignee');
   } else if(type === 'event'){
     const ev = data.events[id];
     if(!ev) return;
@@ -1878,10 +1914,15 @@ document.getElementById('save-edit-btn').addEventListener('click', async ()=>{
     const qty = document.getElementById('edit-item-qty').value.trim();
     const note = document.getElementById('edit-item-note').value.trim();
     const store = document.getElementById('edit-item-store').value;
+    const assigneeUid = document.getElementById('edit-item-assignee').value;
+    let assignedToName = '';
+    if(assigneeUid && currentFamilyData && currentFamilyData.members && currentFamilyData.members[assigneeUid]){
+      assignedToName = currentFamilyData.members[assigneeUid].name || '';
+    }
     const existing = data.shopping[id] || {};
     const category = guessCategory(name) || existing.category || 'Other';
     const emoji = guessEmoji(name, category);
-    await db.ref(`families/${currentFamilyId}/shopping/${id}`).update({ name, qty, note, store, category, emoji });
+    await db.ref(`families/${currentFamilyId}/shopping/${id}`).update({ name, qty, note, store, category, emoji, assignedToUid: assigneeUid, assignedToName });
   } else if(type === 'event'){
     const title = document.getElementById('edit-event-title').value.trim();
     const date = document.getElementById('edit-event-date').value;
@@ -1905,9 +1946,11 @@ document.getElementById('save-edit-btn').addEventListener('click', async ()=>{
 
 function renderReminderFilters(){
   const container = document.getElementById('reminder-filters');
-  if(!currentFamilyData || !currentFamilyData.members){ container.innerHTML = ''; return; }
+  const wrap = document.getElementById('reminder-filters-wrap');
+  if(!currentFamilyData || !currentFamilyData.members){ container.innerHTML = ''; wrap.style.display = 'none'; return; }
   const members = Object.entries(currentFamilyData.members);
-  if(members.length <= 1){ container.innerHTML = ''; return; }
+  if(members.length <= 1){ container.innerHTML = ''; wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
   let html = `<button class="store-chip ${activeReminderFilter==='all'?'active':''}" data-rfilter="all">All</button>`;
   html += members.map(([uid, info])=>{
     const name = (info && info.name) || 'Unknown';
