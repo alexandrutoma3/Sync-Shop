@@ -804,6 +804,19 @@
   </div>
 </div>
 
+<!-- THEME PREVIEW OVERLAY -->
+<div class="overlay" id="theme-preview-overlay">
+  <div class="overlay-panel card">
+    <h3 style="margin:0 0 4px; font-size:1.05rem;" id="theme-preview-title">Preview</h3>
+    <p style="font-size:0.8rem; color:var(--ink-soft); margin:0 0 14px;">This is how the app will look with this theme.</p>
+    <div id="theme-preview-mockup"></div>
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      <button class="btn ghost" id="cancel-theme-btn" style="flex:1;">Cancel</button>
+      <button class="btn" id="apply-theme-btn" style="flex:1;">Apply theme</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="settings-overlay">
   <div class="overlay-panel card">
     <h3 style="margin:0 0 6px; font-size:1.05rem;">Family &amp; Account</h3>
@@ -829,6 +842,9 @@
       <div id="members-list" style="display:flex; flex-direction:column; gap:8px;"></div>
     </div>
 
+    <p style="font-size:0.82rem; color:var(--ink-soft); margin:0 0 8px;">App theme</p>
+    <div class="store-picker-grid" id="theme-picker-grid" style="margin-bottom:18px;"></div>
+
     <button class="btn danger" id="signout-btn" style="width:100%;">Sign out</button>
     <button class="btn ghost small" id="close-settings-btn" style="width:100%; margin-top:10px;">Close</button>
     <p id="app-version-label" style="text-align:center; font-size:0.72rem; color:var(--ink-soft); margin:14px 0 0;"></p>
@@ -838,6 +854,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="native-auth-bundle.js" onerror="console.log('native-auth-bundle.js not present (expected on web)')"></script>
 <script>
 (function(){
   var manifest = {
@@ -874,7 +891,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.35";
+const APP_VERSION = "1.37";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -1180,9 +1197,21 @@ function setAuthMode(mode){
 
 document.getElementById('auth-toggle-btn').addEventListener('click', ()=> setAuthMode('signup'));
 
-document.getElementById('google-signin-btn').addEventListener('click', ()=>{
+document.getElementById('google-signin-btn').addEventListener('click', async ()=>{
   showAuthError('');
-  auth.signInWithPopup(googleProvider).catch(err => showAuthError(err.message));
+  const isNativeAndroid = window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'android';
+  if(isNativeAndroid && window.NativeGoogleAuth){
+    try{
+      const idToken = await window.NativeGoogleAuth.signIn();
+      const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+      await auth.signInWithCredential(credential);
+    }catch(err){
+      console.error(err);
+      showAuthError(err.message || 'Google sign-in failed. Please try again.');
+    }
+  } else {
+    auth.signInWithPopup(googleProvider).catch(err => showAuthError(err.message));
+  }
 });
 
 document.getElementById('auth-submit-btn').addEventListener('click', ()=>{
@@ -1200,7 +1229,10 @@ document.getElementById('auth-submit-btn').addEventListener('click', ()=>{
   action.catch(err => showAuthError(err.message));
 });
 
-document.getElementById('signout-btn').addEventListener('click', ()=> auth.signOut());
+document.getElementById('signout-btn').addEventListener('click', ()=>{
+  closeSettings();
+  auth.signOut();
+});
 document.getElementById('signout-from-family-screen-btn').addEventListener('click', ()=> auth.signOut());
 
 auth.onAuthStateChanged(async (user)=>{
@@ -1209,11 +1241,14 @@ auth.onAuthStateChanged(async (user)=>{
     currentUser = user;
     await ensureUserProfile(user);
     checkNickname();
+    const themeSnap = await db.ref(`users/${user.uid}/theme`).once('value');
+    applyTheme(themeSnap.val() || 'default');
   } else {
     currentUser = null;
     currentFamilyId = null;
     currentNickname = null;
     if(familyListenerRef) familyListenerRef.off();
+    applyTheme('default');
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('nickname-screen').style.display = 'none';
     document.getElementById('family-screen').style.display = 'none';
@@ -1585,6 +1620,128 @@ document.getElementById('copy-invite-btn').addEventListener('click', ()=>{
 });
 
 /* ============ SHOPPING ============ */
+/* ============ APP THEMES ============ */
+const THEMES = {
+  default:  { name:'Original Indigo',    primary:'#4F46E5', accent:'#0D9C94', neutral:'#FAFAFB' },
+  A: { name:'Sunset Terracotta', primary:'#C1573D', accent:'#E8A63D', neutral:'#F5EFE6' },
+  B: { name:'Ocean Calm',        primary:'#0B3D5C', accent:'#4FC3C0', neutral:'#F4F1EA' },
+  C: { name:'Meadow Fresh',      primary:'#3F7D58', accent:'#F2C14E', neutral:'#FBFAF5' },
+  D: { name:'Berry Bloom',       primary:'#9C3D6E', accent:'#C9A6DC', neutral:'#FBF6F8' },
+  F: { name:'Citrus Pop',        primary:'#E8622C', accent:'#8BC53F', neutral:'#FFF9F0' },
+  G: { name:'Lavender Fog',      primary:'#7C6E9B', accent:'#E8B4BC', neutral:'#F7F4F2' },
+  H: { name:'Forest Night',      primary:'#1F4A3D', accent:'#C6702B', neutral:'#F3EEE5' },
+  I: { name:'Coral Reef',        primary:'#F0665A', accent:'#2FA8B5', neutral:'#FDF6EE' },
+  J: { name:'Monochrome Indigo', primary:'#322B6D', accent:'#8B85D6', neutral:'#F5F4FB' },
+};
+let currentThemeKey = 'default';
+
+function hexToRgb(hex){
+  const h = hex.replace('#','');
+  return { r: parseInt(h.substring(0,2),16), g: parseInt(h.substring(2,4),16), b: parseInt(h.substring(4,6),16) };
+}
+function rgbToHex(r,g,b){
+  return '#' + [r,g,b].map(v => Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+}
+function mix(hex, targetHex, amount){
+  const c = hexToRgb(hex), t = hexToRgb(targetHex);
+  return rgbToHex(c.r + (t.r-c.r)*amount, c.g + (t.g-c.g)*amount, c.b + (t.b-c.b)*amount);
+}
+function lighten(hex, amount){ return mix(hex, '#FFFFFF', amount); }
+function darken(hex, amount){ return mix(hex, '#000000', amount); }
+
+function applyTheme(key){
+  const theme = THEMES[key] || THEMES.default;
+  currentThemeKey = key;
+  const root = document.documentElement.style;
+  root.setProperty('--accent', theme.primary);
+  root.setProperty('--accent-strong', darken(theme.primary, 0.18));
+  root.setProperty('--accent-soft', lighten(theme.primary, 0.88));
+  root.setProperty('--teal', theme.accent);
+  root.setProperty('--teal-soft', lighten(theme.accent, 0.85));
+  root.setProperty('--bg', theme.neutral);
+  root.setProperty('--border', darken(theme.neutral, 0.06));
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if(themeColorMeta) themeColorMeta.setAttribute('content', theme.primary);
+  renderThemePicker();
+}
+
+function renderThemePicker(){
+  const grid = document.getElementById('theme-picker-grid');
+  if(!grid) return;
+  grid.innerHTML = Object.keys(THEMES).map(key => {
+    const t = THEMES[key];
+    const selected = key === currentThemeKey;
+    return `
+      <div class="store-option ${selected?'selected':''}" data-theme="${key}">
+        <span style="display:inline-flex; border-radius:50%; overflow:hidden; width:20px; height:20px; flex-shrink:0;">
+          <span style="width:33.3%; background:${t.primary};"></span>
+          <span style="width:33.3%; background:${t.accent};"></span>
+          <span style="width:33.3%; background:${t.neutral};"></span>
+        </span>
+        <span>${t.name}</span>
+      </div>
+    `;
+  }).join('');
+}
+document.getElementById('theme-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  openThemePreview(t.dataset.theme);
+});
+
+let previewingThemeKey = null;
+function openThemePreview(key){
+  previewingThemeKey = key;
+  const theme = THEMES[key];
+  document.getElementById('theme-preview-title').textContent = theme.name;
+  const accentStrong = darken(theme.primary, 0.18);
+  const accentSoft = lighten(theme.primary, 0.88);
+  document.getElementById('theme-preview-mockup').innerHTML = `
+    <div style="border:1px solid ${darken(theme.neutral,0.06)}; border-radius:16px; overflow:hidden; background:${theme.neutral};">
+      <div style="background:#FFFFFF; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid ${darken(theme.neutral,0.06)};">
+        <div>
+          <div style="font-weight:800; font-size:0.9rem; color:#14161B;">Sync &amp; Shop</div>
+          <div style="font-size:0.68rem; color:#767C88;">Your Family ▾</div>
+        </div>
+        <div style="width:34px; height:34px; border-radius:50%; background:${theme.primary}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">+</div>
+      </div>
+      <div style="padding:14px;">
+        <div style="text-align:center; font-size:0.76rem; font-weight:600; color:#767C88; margin-bottom:10px;">Filters ▾</div>
+        <div style="background:#FFFFFF; border:1px solid ${darken(theme.neutral,0.06)}; border-radius:12px; padding:11px 13px; margin-bottom:8px; display:flex; gap:10px; align-items:center;">
+          <div style="width:18px; height:18px; border-radius:50%; border:2px solid ${accentSoft};"></div>
+          <div style="font-size:1.1rem;">🧀</div>
+          <div style="font-weight:600; font-size:0.85rem; color:#14161B; flex:1;">Cheese</div>
+        </div>
+        <div style="background:#FFFFFF; border:1px solid ${darken(theme.neutral,0.06)}; border-radius:12px; padding:11px 13px; display:flex; gap:10px; align-items:center;">
+          <div style="width:18px; height:18px; border-radius:50%; background:${theme.primary};"></div>
+          <div style="font-size:1.1rem;">🥛</div>
+          <div style="font-weight:600; font-size:0.85rem; color:#14161B; text-decoration:line-through; flex:1;">Milk</div>
+        </div>
+      </div>
+      <div style="display:flex; background:#FFFFFF; border-top:1px solid ${darken(theme.neutral,0.06)}; padding:8px 4px;">
+        <div style="flex:1; text-align:center;"><div style="font-size:1.1rem; color:${theme.primary};">🛒</div><div style="font-size:0.6rem; font-weight:700; color:${theme.primary};">Shopping</div></div>
+        <div style="flex:1; text-align:center;"><div style="font-size:1.1rem; opacity:0.5;">🔔</div><div style="font-size:0.6rem; color:#767C88;">Reminders</div></div>
+        <div style="flex:1; text-align:center;"><div style="font-size:1.1rem; opacity:0.5;">📅</div><div style="font-size:0.6rem; color:#767C88;">Calendar</div></div>
+        <div style="flex:1; text-align:center;"><div style="font-size:1.1rem; opacity:0.5;">⚙️</div><div style="font-size:0.6rem; color:#767C88;">Settings</div></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('theme-preview-overlay').classList.add('show');
+}
+document.getElementById('cancel-theme-btn').addEventListener('click', ()=>{
+  document.getElementById('theme-preview-overlay').classList.remove('show');
+  previewingThemeKey = null;
+});
+document.getElementById('apply-theme-btn').addEventListener('click', async ()=>{
+  if(!previewingThemeKey) return;
+  applyTheme(previewingThemeKey);
+  document.getElementById('theme-preview-overlay').classList.remove('show');
+  if(currentUser){
+    await db.ref(`users/${currentUser.uid}/theme`).set(previewingThemeKey);
+  }
+  previewingThemeKey = null;
+});
+
 function renderStorePickerInto(gridId, inputId){
   const grid = document.getElementById(gridId);
   const current = document.getElementById(inputId).value;
