@@ -302,6 +302,7 @@
     align-items:flex-start; justify-content:center; z-index:100; padding:40px 16px; overflow-y:auto;
   }
   .overlay.show{ display:flex; }
+  #theme-preview-overlay{ z-index:110; }
   .overlay-panel{ max-width:420px; width:100%; }
   .overlay-panel a{ color:var(--accent); }
 
@@ -891,7 +892,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.37";
+const APP_VERSION = "1.38";
 
 let currentUser = null;
 let currentFamilyId = null;
