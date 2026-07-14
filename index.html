@@ -539,6 +539,7 @@
     <section class="view" id="view-calendar">
       <div class="cal-toggle">
         <button class="active" data-view="month">Month</button>
+        <button data-view="week">Week</button>
         <button data-view="list">List</button>
       </div>
       <div id="month-view">
@@ -549,6 +550,15 @@
         </div>
         <div class="grid" id="cal-grid"></div>
         <div class="day-panel card" id="day-panel"></div>
+      </div>
+      <div id="week-view" style="display:none;">
+        <div class="month-nav">
+          <button id="prev-week">‹</button>
+          <h2 id="week-label"></h2>
+          <button id="next-week">›</button>
+        </div>
+        <div class="grid" id="week-grid" style="grid-template-columns:repeat(7,1fr);"></div>
+        <div class="day-panel card" id="week-day-panel"></div>
       </div>
       <div id="list-view" style="display:none;">
         <div class="list-events" id="events-list"></div>
@@ -619,17 +629,46 @@
 
 <!-- ADD EVENT OVERLAY -->
 <div class="overlay" id="add-event-overlay">
-  <div class="overlay-panel card">
+  <div class="overlay-panel card" style="max-height:85vh; overflow-y:auto;">
     <h3 style="margin:0 0 14px; font-size:1.05rem;">Add event</h3>
     <input type="text" id="ev-title" placeholder="Event title">
+    <div style="height:8px;"></div>
+    <input type="text" id="ev-location" placeholder="Location / address (optional)">
+
+    <label style="display:flex; align-items:center; gap:8px; margin:12px 0 4px; font-size:0.85rem; color:var(--ink-soft); cursor:pointer;">
+      <input type="checkbox" id="ev-allday" style="width:auto;"> All day
+    </label>
+
+    <div class="store-picker-label" style="margin-top:6px;">Starts</div>
     <div class="row">
       <input type="date" id="ev-date">
       <input type="time" id="ev-time">
     </div>
-    <textarea id="ev-note" placeholder="Note (optional)" rows="2"></textarea>
+    <div class="store-picker-label" style="margin-top:6px;">Ends</div>
+    <div class="row">
+      <input type="date" id="ev-end-date">
+      <input type="time" id="ev-end-time">
+    </div>
+
+    <textarea id="ev-note" placeholder="Note (optional)" rows="2" style="margin-top:8px;"></textarea>
+
     <div class="store-picker-label" style="margin-top:8px;">Category</div>
     <div class="store-picker-grid" id="ev-category-picker-grid"></div>
     <input type="hidden" id="ev-category" value="Other">
+
+    <div class="store-picker-label" style="margin-top:8px;">Repeat</div>
+    <div class="store-picker-grid" id="ev-repeat-picker-grid"></div>
+    <input type="hidden" id="ev-repeat-freq" value="none">
+    <div id="ev-repeat-interval-row" class="row" style="display:none; margin-top:8px; align-items:center;">
+      <span style="font-size:0.85rem; color:var(--ink-soft); white-space:nowrap;">Every</span>
+      <input type="number" id="ev-repeat-interval" min="1" value="1" style="max-width:70px;">
+      <span id="ev-repeat-unit-label" style="font-size:0.85rem; color:var(--ink-soft); white-space:nowrap;">day(s)</span>
+    </div>
+    <div id="ev-repeat-weekdays-row" style="display:none; margin-top:8px;">
+      <div class="store-picker-grid" id="ev-repeat-weekdays-grid" style="grid-template-columns:repeat(7,1fr);"></div>
+      <input type="hidden" id="ev-repeat-weekdays" value="">
+    </div>
+
     <div style="display:flex; gap:8px; margin-top:14px;">
       <button class="btn ghost" id="cancel-add-event-btn" style="flex:1;">Cancel</button>
       <button class="btn" id="add-event-btn" style="flex:1;">+ Add event</button>
@@ -686,15 +725,42 @@
     <div id="edit-fields-event" style="display:none;">
       <input type="text" id="edit-event-title" placeholder="Event title">
       <div style="height:8px;"></div>
+      <input type="text" id="edit-event-location" placeholder="Location / address (optional)">
+
+      <label style="display:flex; align-items:center; gap:8px; margin:12px 0 4px; font-size:0.85rem; color:var(--ink-soft); cursor:pointer;">
+        <input type="checkbox" id="edit-event-allday" style="width:auto;"> All day
+      </label>
+
+      <div class="store-picker-label" style="margin-top:6px;">Starts</div>
       <div class="row">
         <input type="date" id="edit-event-date">
         <input type="time" id="edit-event-time">
       </div>
-      <div style="height:8px;"></div>
-      <textarea id="edit-event-note" placeholder="Note (optional)" rows="2"></textarea>
+      <div class="store-picker-label" style="margin-top:6px;">Ends</div>
+      <div class="row">
+        <input type="date" id="edit-event-end-date">
+        <input type="time" id="edit-event-end-time">
+      </div>
+
+      <textarea id="edit-event-note" placeholder="Note (optional)" rows="2" style="margin-top:8px;"></textarea>
+
       <div class="store-picker-label" style="margin-top:8px;">Category</div>
       <div class="store-picker-grid" id="edit-event-category-picker-grid"></div>
       <input type="hidden" id="edit-event-category" value="Other">
+
+      <div class="store-picker-label" style="margin-top:8px;">Repeat</div>
+      <div class="store-picker-grid" id="edit-event-repeat-picker-grid"></div>
+      <input type="hidden" id="edit-event-repeat-freq" value="none">
+      <div id="edit-event-repeat-interval-row" class="row" style="display:none; margin-top:8px; align-items:center;">
+        <span style="font-size:0.85rem; color:var(--ink-soft); white-space:nowrap;">Every</span>
+        <input type="number" id="edit-event-repeat-interval" min="1" value="1" style="max-width:70px;">
+        <span id="edit-event-repeat-unit-label" style="font-size:0.85rem; color:var(--ink-soft); white-space:nowrap;">day(s)</span>
+      </div>
+      <div id="edit-event-repeat-weekdays-row" style="display:none; margin-top:8px;">
+        <div class="store-picker-grid" id="edit-event-repeat-weekdays-grid" style="grid-template-columns:repeat(7,1fr);"></div>
+        <input type="hidden" id="edit-event-repeat-weekdays" value="">
+      </div>
+      <p style="font-size:0.72rem; color:var(--ink-soft); margin:10px 0 0; line-height:1.4;">Editing a recurring event updates the entire series.</p>
     </div>
 
     <div id="edit-fields-reminder" style="display:none;">
@@ -808,7 +874,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.34";
+const APP_VERSION = "1.35";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -819,6 +885,12 @@ let data = { shopping: {}, events: {}, productHistory: {}, reminders: {} };
 let selectedDate = null;
 let calView = 'month';
 let currentMonth = new Date();
+let currentWeekStart = (function(){
+  const d = new Date();
+  const dow = (d.getDay() + 6) % 7; // 0=Mon
+  d.setDate(d.getDate() - dow);
+  return d;
+})();
 let activeStoreFilter = 'all';
 let activeMemberFilter = 'all';
 let activeReminderFilter = 'all';
@@ -1453,6 +1525,10 @@ function openAddModal(){
   } else if(activeTab === 'calendar'){
     document.getElementById('ev-date').value = selectedDate || todayStr();
     renderEventCategoryPickerInto('ev-category-picker-grid', 'ev-category');
+    document.getElementById('ev-repeat-freq').value = 'none';
+    document.getElementById('ev-repeat-interval').value = '1';
+    document.getElementById('ev-repeat-weekdays').value = '';
+    renderRepeatPickerInto('ev-repeat-picker-grid', 'ev-repeat-freq', 'ev');
     document.getElementById('add-event-overlay').classList.add('show');
     document.getElementById('ev-title').focus();
   }
@@ -1562,6 +1638,93 @@ document.getElementById('edit-event-category-picker-grid').addEventListener('cli
   document.getElementById('edit-event-category').value = t.dataset.cat;
   renderEventCategoryPickerInto('edit-event-category-picker-grid', 'edit-event-category');
 });
+
+const REPEAT_OPTIONS = [
+  { freq:'none', label:'None' },
+  { freq:'days', label:'Days' },
+  { freq:'weeks', label:'Weeks' },
+  { freq:'months', label:'Months' },
+  { freq:'weekdays', label:'Weekdays' }
+];
+const WEEKDAY_PICKS = [
+  { label:'Mo', val:1 }, { label:'Tu', val:2 }, { label:'We', val:3 }, { label:'Th', val:4 },
+  { label:'Fr', val:5 }, { label:'Sa', val:6 }, { label:'Su', val:0 }
+];
+
+function renderRepeatPickerInto(gridId, freqInputId, prefix){
+  const grid = document.getElementById(gridId);
+  const current = document.getElementById(freqInputId).value || 'none';
+  grid.innerHTML = REPEAT_OPTIONS.map(o => `
+    <div class="store-option ${current===o.freq?'selected':''}" data-freq="${o.freq}"><span>${o.label}</span></div>
+  `).join('');
+  updateRepeatRowsVisibility(prefix, current);
+}
+
+function updateRepeatRowsVisibility(prefix, freq){
+  const intervalRow = document.getElementById(`${prefix}-repeat-interval-row`);
+  const weekdaysRow = document.getElementById(`${prefix}-repeat-weekdays-row`);
+  const unitLabel = document.getElementById(`${prefix}-repeat-unit-label`);
+  intervalRow.style.display = (freq==='days'||freq==='weeks'||freq==='months') ? 'flex' : 'none';
+  weekdaysRow.style.display = freq==='weekdays' ? 'block' : 'none';
+  if(freq==='days') unitLabel.textContent = 'day(s)';
+  else if(freq==='weeks') unitLabel.textContent = 'week(s)';
+  else if(freq==='months') unitLabel.textContent = 'month(s)';
+  if(freq==='weekdays'){
+    renderWeekdaysPickerInto(`${prefix}-repeat-weekdays-grid`, `${prefix}-repeat-weekdays`);
+  }
+}
+
+function renderWeekdaysPickerInto(gridId, hiddenInputId){
+  const grid = document.getElementById(gridId);
+  const hidden = document.getElementById(hiddenInputId);
+  const selected = hidden.value ? hidden.value.split(',').map(Number) : [];
+  grid.innerHTML = WEEKDAY_PICKS.map(w => `
+    <div class="store-option ${selected.includes(w.val)?'selected':''}" data-wd="${w.val}" style="padding:8px 2px;"><span>${w.label}</span></div>
+  `).join('');
+}
+
+document.getElementById('ev-repeat-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('ev-repeat-freq').value = t.dataset.freq;
+  renderRepeatPickerInto('ev-repeat-picker-grid', 'ev-repeat-freq', 'ev');
+});
+document.getElementById('edit-event-repeat-picker-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  document.getElementById('edit-event-repeat-freq').value = t.dataset.freq;
+  renderRepeatPickerInto('edit-event-repeat-picker-grid', 'edit-event-repeat-freq', 'edit-event');
+});
+document.getElementById('ev-repeat-weekdays-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  toggleWeekdaySelection('ev-repeat-weekdays', 'ev-repeat-weekdays-grid', t.dataset.wd);
+});
+document.getElementById('edit-event-repeat-weekdays-grid').addEventListener('click', (e)=>{
+  const t = e.target.closest('.store-option');
+  if(!t) return;
+  toggleWeekdaySelection('edit-event-repeat-weekdays', 'edit-event-repeat-weekdays-grid', t.dataset.wd);
+});
+function toggleWeekdaySelection(hiddenInputId, gridId, wdStr){
+  let hidden = document.getElementById(hiddenInputId);
+  const wd = Number(wdStr);
+  let selected = hidden.value ? hidden.value.split(',').map(Number) : [];
+  if(selected.includes(wd)) selected = selected.filter(v=>v!==wd);
+  else selected.push(wd);
+  hidden.value = selected.join(',');
+  renderWeekdaysPickerInto(gridId, hiddenInputId);
+}
+
+function setupAllDayToggle(checkboxId, timeStartId, timeEndId){
+  document.getElementById(checkboxId).addEventListener('change', (e)=>{
+    const disabled = e.target.checked;
+    document.getElementById(timeStartId).disabled = disabled;
+    document.getElementById(timeEndId).disabled = disabled;
+    if(disabled){ document.getElementById(timeStartId).value=''; document.getElementById(timeEndId).value=''; }
+  });
+}
+setupAllDayToggle('ev-allday', 'ev-time', 'ev-end-time');
+setupAllDayToggle('edit-event-allday', 'edit-event-time', 'edit-event-end-time');
 
 function renderStoreFilters(){
   const container = document.getElementById('store-filters');
@@ -1818,6 +1981,82 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 function fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function todayStr(){ return fmtDate(new Date()); }
 function eventsArray(){ return Object.entries(data.events || {}).map(([id, ev]) => ({ id, ...ev })); }
+
+function parseDate(ds){
+  const [y,m,d] = ds.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function addDays(d, n){ const r = new Date(d); r.setDate(r.getDate()+n); return r; }
+function addMonths(d, n){ const r = new Date(d); r.setMonth(r.getMonth()+n); return r; }
+function daysBetween(dsA, dsB){ return Math.round((parseDate(dsB) - parseDate(dsA)) / 86400000); }
+
+// Returns the list of date strings (within [rangeStart, rangeEnd]) on which this event
+// (accounting for its multi-day span and/or recurrence rule) actually appears.
+function getOccurrenceDatesInRange(ev, rangeStart, rangeEnd){
+  const spanDays = Math.max(0, daysBetween(ev.date, ev.endDate || ev.date));
+  const rec = ev.recurrence;
+  const results = [];
+  const rangeStartD = parseDate(rangeStart);
+  const rangeEndD = parseDate(rangeEnd);
+
+  function addOccurrenceIfVisible(startStr){
+    const occStart = parseDate(startStr);
+    const occEnd = addDays(occStart, spanDays);
+    if(occEnd < rangeStartD || occStart > rangeEndD) return;
+    let cursor = new Date(Math.max(occStart, rangeStartD));
+    const stop = new Date(Math.min(occEnd, rangeEndD));
+    while(cursor <= stop){
+      results.push(fmtDate(cursor));
+      cursor = addDays(cursor, 1);
+    }
+  }
+
+  if(!rec || !rec.freq || rec.freq === 'none'){
+    addOccurrenceIfVisible(ev.date);
+    return results;
+  }
+
+  const maxIterations = 2000;
+  let iter = 0;
+  let cursor = parseDate(ev.date);
+
+  if(rec.freq === 'weekdays'){
+    const wds = rec.weekdays && rec.weekdays.length ? rec.weekdays : [cursor.getDay()];
+    while(cursor <= rangeEndD && iter < maxIterations){
+      if(wds.includes(cursor.getDay()) && addDays(cursor, spanDays) >= rangeStartD){
+        addOccurrenceIfVisible(fmtDate(cursor));
+      }
+      cursor = addDays(cursor, 1);
+      iter++;
+    }
+  } else {
+    const interval = Math.max(1, parseInt(rec.interval) || 1);
+    while(cursor <= rangeEndD && iter < maxIterations){
+      if(addDays(cursor, spanDays) >= rangeStartD){
+        addOccurrenceIfVisible(fmtDate(cursor));
+      }
+      if(rec.freq === 'days') cursor = addDays(cursor, interval);
+      else if(rec.freq === 'weeks') cursor = addDays(cursor, 7*interval);
+      else if(rec.freq === 'months') cursor = addMonths(cursor, interval);
+      else break;
+      iter++;
+    }
+  }
+  return results;
+}
+
+// Builds a flat list of { ...event, occurrenceDate } for every visible occurrence within a range.
+function expandEventsInRange(rangeStart, rangeEnd){
+  const out = [];
+  for(const ev of eventsArray()){
+    const dates = getOccurrenceDatesInRange(ev, rangeStart, rangeEnd);
+    for(const ds of dates){
+      out.push({ ...ev, occurrenceDate: ds });
+    }
+  }
+  return out;
+}
+
 function formatLastUpdated(){
   const now = new Date();
   const month = MONTHS[now.getMonth()].slice(0,3);
@@ -1835,7 +2074,8 @@ function renderMonthGrid(){
   let startDow = first.getDay();
   startDow = (startDow + 6) % 7;
   const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 0).getDate();
-  const evs = eventsArray();
+  const last = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), daysInMonth);
+  const occurrences = expandEventsInRange(fmtDate(first), fmtDate(last));
 
   let html = DOW.map((d,i)=>`<div class="dow ${i>=5?'weekend':''}">${d}</div>`).join('');
   for(let i=0;i<startDow;i++) html += `<div class="day empty-day"></div>`;
@@ -1844,7 +2084,7 @@ function renderMonthGrid(){
     const ds = fmtDate(dateObj);
     const dowIndex = (dateObj.getDay() + 6) % 7; // 0=Mon ... 6=Sun
     const isWeekend = dowIndex >= 5;
-    const dayEvents = evs.filter(ev=>ev.date===ds).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    const dayEvents = occurrences.filter(ev=>ev.occurrenceDate===ds).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
     const isToday = ds === todayStr();
     const isSelected = ds === selectedDate;
     const maxBars = 2;
@@ -1864,6 +2104,103 @@ function renderMonthGrid(){
   renderDayPanel();
 }
 
+let selectedWeekDate = null;
+
+function renderWeekGrid(){
+  const grid = document.getElementById('week-grid');
+  const label = document.getElementById('week-label');
+  const weekEnd = addDays(currentWeekStart, 6);
+  const sameMonth = currentWeekStart.getMonth() === weekEnd.getMonth();
+  label.textContent = sameMonth
+    ? `${MONTHS[currentWeekStart.getMonth()].slice(0,3)} ${currentWeekStart.getDate()}–${weekEnd.getDate()}, ${weekEnd.getFullYear()}`
+    : `${MONTHS[currentWeekStart.getMonth()].slice(0,3)} ${currentWeekStart.getDate()} – ${MONTHS[weekEnd.getMonth()].slice(0,3)} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
+
+  const occurrences = expandEventsInRange(fmtDate(currentWeekStart), fmtDate(weekEnd));
+  let html = DOW.map((d,i)=>`<div class="dow ${i>=5?'weekend':''}">${d}</div>`).join('');
+  for(let i=0;i<7;i++){
+    const dateObj = addDays(currentWeekStart, i);
+    const ds = fmtDate(dateObj);
+    const isWeekend = i>=5;
+    const isToday = ds === todayStr();
+    const isSelected = ds === selectedWeekDate;
+    const dayEvents = occurrences.filter(ev=>ev.occurrenceDate===ds).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    const maxBars = 3;
+    const visibleEvents = dayEvents.slice(0, maxBars);
+    const extraCount = dayEvents.length - visibleEvents.length;
+    const barsHtml = visibleEvents.map(ev=>{
+      const color = (EVENT_CATEGORIES[ev.category] && EVENT_CATEGORIES[ev.category].color) || EVENT_CATEGORIES['Other'].color;
+      return `<div class="day-event-bar" style="background:${color}">${escapeHtml(ev.title)}</div>`;
+    }).join('');
+    const moreHtml = extraCount > 0 ? `<div class="day-event-more">+${extraCount} more</div>` : '';
+    html += `<div class="day ${isToday?'today':''} ${isSelected?'selected':''} ${isWeekend?'weekend':''}" data-date="${ds}" data-week-day="1" style="min-height:90px;">
+      <div class="day-num">${dateObj.getDate()}</div>
+      ${barsHtml}${moreHtml}
+    </div>`;
+  }
+  grid.innerHTML = html;
+  renderWeekDayPanel();
+}
+
+function renderWeekDayPanel(){
+  const panel = document.getElementById('week-day-panel');
+  if(!selectedWeekDate){
+    panel.innerHTML = `<div class="empty" style="padding:16px 0;">Tap a day to view its events.</div>`;
+    return;
+  }
+  const [y,m,d] = selectedWeekDate.split('-');
+  const evs = expandEventsInRange(selectedWeekDate, selectedWeekDate).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  panel.innerHTML = `
+    <h3>${MONTHS[parseInt(m)-1]} ${parseInt(d)}, ${y}</h3>
+    <div>
+      ${evs.length===0 ? `<div class="empty" style="padding:8px 0;font-size:0.85rem;">Nothing scheduled for this day.</div>` :
+      evs.map(ev=>eventCardHtml(ev)).join('')}
+    </div>
+  `;
+}
+
+document.getElementById('week-grid').addEventListener('click', (e)=>{
+  const dayEl = e.target.closest('.day[data-week-day]');
+  if(!dayEl) return;
+  selectedWeekDate = dayEl.dataset.date;
+  renderWeekGrid();
+});
+document.getElementById('prev-week').addEventListener('click', ()=>{
+  currentWeekStart = addDays(currentWeekStart, -7);
+  renderWeekGrid();
+});
+document.getElementById('next-week').addEventListener('click', ()=>{
+  currentWeekStart = addDays(currentWeekStart, 7);
+  renderWeekGrid();
+});
+
+function eventTimeLabel(ev){
+  if(ev.allDay) return 'All day';
+  if(ev.time && ev.endTime) return `${ev.time} – ${ev.endTime}`;
+  if(ev.time) return ev.time;
+  return '';
+}
+
+function eventCardHtml(ev, extraClass){
+  const color = (EVENT_CATEGORIES[ev.category] && EVENT_CATEGORIES[ev.category].color) || EVENT_CATEGORIES['Other'].color;
+  const timeLabel = eventTimeLabel(ev);
+  return `
+    <div class="event-card ${extraClass||''}" style="border-left-color:${color}">
+      <div>
+        ${timeLabel ? `<div class="event-time">${escapeHtml(timeLabel)}</div>` : ''}
+        <div class="event-title">${escapeHtml(ev.title)}</div>
+        ${ev.location ? `<div class="event-note">📍 ${escapeHtml(ev.location)}</div>` : ''}
+        ${ev.note ? `<div class="event-note">${escapeHtml(ev.note)}</div>` : ''}
+        ${ev.recurrence && ev.recurrence.freq && ev.recurrence.freq !== 'none' ? `<div class="added-by">🔁 Repeats</div>` : ''}
+        ${ev.addedBy ? `<div class="added-by">Added by ${escapeHtml(ev.addedBy)}</div>` : ''}
+      </div>
+      <div class="entry-actions">
+        <button class="edit-btn" data-action="edit-event" data-id="${ev.id}">✎</button>
+        <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderDayPanel(){
   const panel = document.getElementById('day-panel');
   if(!selectedDate){
@@ -1871,25 +2208,12 @@ function renderDayPanel(){
     return;
   }
   const [y,m,d] = selectedDate.split('-');
-  const evs = eventsArray().filter(e=>e.date===selectedDate).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  const evs = expandEventsInRange(selectedDate, selectedDate).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   panel.innerHTML = `
     <h3>${MONTHS[parseInt(m)-1]} ${parseInt(d)}, ${y}</h3>
     <div id="day-events">
       ${evs.length===0 ? `<div class="empty" style="padding:8px 0;font-size:0.85rem;">Nothing scheduled for this day.</div>` :
-      evs.map(ev=>`
-        <div class="event-card" style="border-left-color:${(EVENT_CATEGORIES[ev.category] && EVENT_CATEGORIES[ev.category].color) || EVENT_CATEGORIES['Other'].color}">
-          <div>
-            ${ev.time?`<div class="event-time">${ev.time}</div>`:''}
-            <div class="event-title">${escapeHtml(ev.title)}</div>
-            ${ev.note?`<div class="event-note">${escapeHtml(ev.note)}</div>`:''}
-            ${ev.addedBy ? `<div class="added-by">Added by ${escapeHtml(ev.addedBy)}</div>` : ''}
-          </div>
-          <div class="entry-actions">
-            <button class="edit-btn" data-action="edit-event" data-id="${ev.id}">✎</button>
-            <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
-          </div>
-        </div>
-      `).join('')}
+      evs.map(ev=>eventCardHtml(ev)).join('')}
     </div>
   `;
 }
@@ -1911,32 +2235,28 @@ document.getElementById('next-month').addEventListener('click', ()=>{
 
 function renderEventsList(){
   const container = document.getElementById('events-list');
-  const sorted = eventsArray().sort((a,b)=> (a.date+(a.time||'00:00')).localeCompare(b.date+(b.time||'00:00')));
-  if(sorted.length===0){
+  if(eventsArray().length===0){
     container.innerHTML = `<div class="empty">Your calendar is empty.<br>Add your first event above.</div>`;
+    return;
+  }
+  const rangeStart = fmtDate(addDays(new Date(), -30));
+  const rangeEnd = fmtDate(addDays(new Date(), 180));
+  const occurrences = expandEventsInRange(rangeStart, rangeEnd);
+  const sorted = occurrences.sort((a,b)=> (a.occurrenceDate+(a.time||'00:00')).localeCompare(b.occurrenceDate+(b.time||'00:00')));
+  if(sorted.length===0){
+    container.innerHTML = `<div class="empty">Nothing scheduled in the next few months.</div>`;
     return;
   }
   const today = todayStr();
   container.innerHTML = sorted.map(ev=>{
-    const [y,m,d] = ev.date.split('-');
-    const isPast = ev.date < today;
-    return `
-      <div class="event-card ${isPast?'past':''}" style="border-left-color:${(EVENT_CATEGORIES[ev.category] && EVENT_CATEGORIES[ev.category].color) || EVENT_CATEGORIES['Other'].color}">
-        <div>
-          ${ev.time?`<div class="event-time">${ev.time}</div>`:''}
-          <div class="event-title">${escapeHtml(ev.title)}</div>
-          ${ev.note?`<div class="event-note">${escapeHtml(ev.note)}</div>`:''}
-          ${ev.addedBy ? `<div class="added-by">Added by ${escapeHtml(ev.addedBy)}</div>` : ''}
-        </div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-          <div class="event-date-badge">${MONTHS[parseInt(m)-1].slice(0,3)} ${parseInt(d)}</div>
-          <div class="entry-actions" style="flex-direction:row;">
-            <button class="edit-btn" data-action="edit-event" data-id="${ev.id}">✎</button>
-            <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
-          </div>
-        </div>
-      </div>
-    `;
+    const [y,m,d] = ev.occurrenceDate.split('-');
+    const isPast = ev.occurrenceDate < today;
+    const cardHtml = eventCardHtml(ev, isPast ? 'past' : '');
+    // Inject the date badge into the action column by re-rendering the actions block manually
+    return cardHtml.replace(
+      '<div class="entry-actions">',
+      `<div class="event-date-badge" style="margin-bottom:6px;">${MONTHS[parseInt(m)-1].slice(0,3)} ${parseInt(d)}</div><div class="entry-actions" style="flex-direction:row;">`
+    );
   }).join('');
 }
 
@@ -1950,21 +2270,50 @@ document.addEventListener('click', async (e)=>{
   }
 });
 
+function collectRecurrenceFromForm(prefix){
+  const freq = document.getElementById(`${prefix}-repeat-freq`).value;
+  if(!freq || freq === 'none') return null;
+  if(freq === 'weekdays'){
+    const wds = document.getElementById(`${prefix}-repeat-weekdays`).value;
+    const weekdays = wds ? wds.split(',').map(Number) : [];
+    if(weekdays.length === 0) return null;
+    return { freq:'weekdays', weekdays };
+  }
+  const interval = Math.max(1, parseInt(document.getElementById(`${prefix}-repeat-interval`).value) || 1);
+  return { freq, interval };
+}
+
 document.getElementById('add-event-btn').addEventListener('click', async ()=>{
   const titleEl = document.getElementById('ev-title');
   const dateEl = document.getElementById('ev-date');
   const timeEl = document.getElementById('ev-time');
+  const endDateEl = document.getElementById('ev-end-date');
+  const endTimeEl = document.getElementById('ev-end-time');
+  const locationEl = document.getElementById('ev-location');
   const noteEl = document.getElementById('ev-note');
   const categoryEl = document.getElementById('ev-category');
+  const allDayEl = document.getElementById('ev-allday');
   const title = titleEl.value.trim();
   const date = dateEl.value;
   if(!title || !date) return;
-  await db.ref(`families/${currentFamilyId}/events`).push({
-    date, time: timeEl.value, title, note: noteEl.value.trim(), category: categoryEl.value,
+  const recurrence = collectRecurrenceFromForm('ev');
+  const newEvent = {
+    date, endDate: endDateEl.value || date,
+    time: allDayEl.checked ? '' : timeEl.value,
+    endTime: allDayEl.checked ? '' : endTimeEl.value,
+    allDay: allDayEl.checked,
+    title, location: locationEl.value.trim(), note: noteEl.value.trim(), category: categoryEl.value,
     addedBy: currentDisplayName(), addedByUid: currentUser.uid, createdAt: Date.now()
-  });
-  titleEl.value=''; dateEl.value=''; timeEl.value=''; noteEl.value=''; categoryEl.value='Other';
+  };
+  if(recurrence) newEvent.recurrence = recurrence;
+  await db.ref(`families/${currentFamilyId}/events`).push(newEvent);
+  titleEl.value=''; dateEl.value=''; timeEl.value=''; endDateEl.value=''; endTimeEl.value='';
+  locationEl.value=''; noteEl.value=''; categoryEl.value='Other'; allDayEl.checked=false;
+  timeEl.disabled=false; endTimeEl.disabled=false;
+  document.getElementById('ev-repeat-freq').value='none';
+  document.getElementById('ev-repeat-weekdays').value='';
   renderEventCategoryPickerInto('ev-category-picker-grid', 'ev-category');
+  renderRepeatPickerInto('ev-repeat-picker-grid', 'ev-repeat-freq', 'ev');
   document.getElementById('add-event-overlay').classList.remove('show');
 });
 
@@ -1985,8 +2334,10 @@ document.querySelectorAll('.cal-toggle button').forEach(btn=>{
     btn.classList.add('active');
     calView = btn.dataset.view;
     document.getElementById('month-view').style.display = calView==='month' ? '' : 'none';
+    document.getElementById('week-view').style.display = calView==='week' ? '' : 'none';
     document.getElementById('list-view').style.display = calView==='list' ? '' : 'none';
     if(calView==='list') renderEventsList();
+    if(calView==='week') renderWeekGrid();
   });
 });
 
@@ -2072,9 +2423,20 @@ function openEditModal(type, id){
     document.getElementById('edit-event-title').value = ev.title || '';
     document.getElementById('edit-event-date').value = ev.date || '';
     document.getElementById('edit-event-time').value = ev.time || '';
+    document.getElementById('edit-event-end-date').value = (ev.endDate && ev.endDate !== ev.date) ? ev.endDate : '';
+    document.getElementById('edit-event-end-time').value = ev.endTime || '';
+    document.getElementById('edit-event-location').value = ev.location || '';
+    document.getElementById('edit-event-allday').checked = !!ev.allDay;
+    document.getElementById('edit-event-time').disabled = !!ev.allDay;
+    document.getElementById('edit-event-end-time').disabled = !!ev.allDay;
     document.getElementById('edit-event-note').value = ev.note || '';
     document.getElementById('edit-event-category').value = ev.category || 'Other';
     renderEventCategoryPickerInto('edit-event-category-picker-grid', 'edit-event-category');
+    const rec = ev.recurrence || { freq:'none' };
+    document.getElementById('edit-event-repeat-freq').value = rec.freq || 'none';
+    document.getElementById('edit-event-repeat-interval').value = rec.interval || 1;
+    document.getElementById('edit-event-repeat-weekdays').value = rec.weekdays ? rec.weekdays.join(',') : '';
+    renderRepeatPickerInto('edit-event-repeat-picker-grid', 'edit-event-repeat-freq', 'edit-event');
   } else if(type === 'reminder'){
     const r = data.reminders[id];
     if(!r) return;
@@ -2117,10 +2479,16 @@ document.getElementById('save-edit-btn').addEventListener('click', async ()=>{
     const title = document.getElementById('edit-event-title').value.trim();
     const date = document.getElementById('edit-event-date').value;
     if(!title || !date){ errorEl.textContent = 'Please enter a title and date.'; return; }
-    const time = document.getElementById('edit-event-time').value;
+    const allDay = document.getElementById('edit-event-allday').checked;
+    const time = allDay ? '' : document.getElementById('edit-event-time').value;
+    const endTime = allDay ? '' : document.getElementById('edit-event-end-time').value;
+    const endDateVal = document.getElementById('edit-event-end-date').value;
+    const location = document.getElementById('edit-event-location').value.trim();
     const note = document.getElementById('edit-event-note').value.trim();
     const category = document.getElementById('edit-event-category').value;
-    await db.ref(`families/${currentFamilyId}/events/${id}`).update({ title, date, time, note, category });
+    const recurrence = collectRecurrenceFromForm('edit-event');
+    const updates = { title, date, endDate: endDateVal || date, time, endTime, allDay, location, note, category, recurrence: recurrence || null };
+    await db.ref(`families/${currentFamilyId}/events/${id}`).update(updates);
   } else if(type === 'reminder'){
     const text = document.getElementById('edit-reminder-text').value.trim();
     if(!text){ errorEl.textContent = 'Please enter a reminder.'; return; }
