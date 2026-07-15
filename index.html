@@ -157,8 +157,8 @@
     background:var(--surface-alt); font-size:0.8rem; color:#fff; font-weight:700; transition:all .15s ease;
   }
   .item.checked .check{ background:var(--accent); border-color:var(--accent); }
-  .del{ background:none; border:none; color:var(--ink-soft); font-size:1rem; cursor:pointer; padding:4px 6px; flex-shrink:0; border-radius:8px; transition:all .15s ease; }
-  .edit-btn{ background:none; border:none; color:var(--ink-soft); font-size:0.95rem; cursor:pointer; padding:4px 6px; flex-shrink:0; border-radius:8px; transition:all .15s ease; }
+  .del{ background:none; border:none; color:var(--ink-soft); font-size:1.35rem; cursor:pointer; padding:7px 9px; flex-shrink:0; border-radius:8px; transition:all .15s ease; line-height:1; }
+  .edit-btn{ background:none; border:none; color:var(--ink-soft); font-size:1.3rem; cursor:pointer; padding:7px 9px; flex-shrink:0; border-radius:8px; transition:all .15s ease; line-height:1; }
   .edit-btn:hover{ color:var(--accent); background:var(--accent-soft); }
   .entry-actions{ display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
   .del:hover{ color:var(--danger); background:var(--danger-soft); }
@@ -779,6 +779,7 @@
       <button class="btn ghost" id="cancel-edit-btn" style="flex:1;">Cancel</button>
       <button class="btn" id="save-edit-btn" style="flex:1;">Save changes</button>
     </div>
+    <button class="btn" id="delete-edit-btn" style="width:100%; margin-top:8px; background:var(--danger); color:#fff;">Delete</button>
   </div>
 </div>
 
@@ -892,7 +893,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.38";
+const APP_VERSION = "1.41";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -2023,7 +2024,6 @@ function renderShopping(){
             </div>
             <div class="entry-actions">
               <button class="edit-btn" data-action="edit-item" data-id="${it.id}">✎</button>
-              <button class="del" data-action="delete-item" data-id="${it.id}">✕</button>
             </div>
           </div>
         `).join('')}
@@ -2319,7 +2319,8 @@ function renderWeekDayPanel(){
 document.getElementById('week-grid').addEventListener('click', (e)=>{
   const dayEl = e.target.closest('.day[data-week-day]');
   if(!dayEl) return;
-  selectedWeekDate = dayEl.dataset.date;
+  const tappedDate = dayEl.dataset.date;
+  selectedWeekDate = (selectedWeekDate === tappedDate) ? null : tappedDate;
   renderWeekGrid();
 });
 document.getElementById('prev-week').addEventListener('click', ()=>{
@@ -2353,7 +2354,6 @@ function eventCardHtml(ev, extraClass){
       </div>
       <div class="entry-actions">
         <button class="edit-btn" data-action="edit-event" data-id="${ev.id}">✎</button>
-        <button class="del" data-action="delete-event" data-id="${ev.id}">✕</button>
       </div>
     </div>
   `;
@@ -2379,7 +2379,8 @@ function renderDayPanel(){
 document.getElementById('cal-grid').addEventListener('click', (e)=>{
   const dayEl = e.target.closest('.day:not(.empty-day)');
   if(!dayEl) return;
-  selectedDate = dayEl.dataset.date;
+  const tappedDate = dayEl.dataset.date;
+  selectedDate = (selectedDate === tappedDate) ? null : tappedDate;
   renderMonthGrid();
 });
 document.getElementById('prev-month').addEventListener('click', ()=>{
@@ -2613,6 +2614,19 @@ function closeEditModal(){
 }
 document.getElementById('cancel-edit-btn').addEventListener('click', closeEditModal);
 
+document.getElementById('delete-edit-btn').addEventListener('click', async ()=>{
+  if(!editContext) return;
+  const { type, id } = editContext;
+  if(type === 'shopping'){
+    await db.ref(`families/${currentFamilyId}/shopping/${id}`).remove();
+  } else if(type === 'event'){
+    await db.ref(`families/${currentFamilyId}/events/${id}`).remove();
+  } else if(type === 'reminder'){
+    await db.ref(`families/${currentFamilyId}/reminders/${id}`).remove();
+  }
+  closeEditModal();
+});
+
 document.getElementById('save-edit-btn').addEventListener('click', async ()=>{
   if(!editContext) return;
   const { type, id } = editContext;
@@ -2733,7 +2747,6 @@ function renderReminders(){
         </div>
         <div class="entry-actions">
           <button class="edit-btn" data-action="edit-reminder" data-id="${r.id}">✎</button>
-          <button class="del" data-action="delete-reminder" data-id="${r.id}">✕</button>
         </div>
       </div>
     `;
