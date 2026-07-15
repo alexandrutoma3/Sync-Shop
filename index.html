@@ -562,6 +562,11 @@
         <div class="day-panel card" id="week-day-panel"></div>
       </div>
       <div id="list-view" style="display:none;">
+        <div class="month-nav">
+          <button id="prev-month-list">‹</button>
+          <h2 id="month-label-list"></h2>
+          <button id="next-month-list">›</button>
+        </div>
         <div class="list-events" id="events-list"></div>
       </div>
     </section>
@@ -893,7 +898,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.41";
+const APP_VERSION = "1.43";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -2391,32 +2396,72 @@ document.getElementById('next-month').addEventListener('click', ()=>{
   currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 1);
   renderMonthGrid();
 });
+document.getElementById('prev-month-list').addEventListener('click', ()=>{
+  currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()-1, 1);
+  renderEventsList();
+});
+document.getElementById('next-month-list').addEventListener('click', ()=>{
+  currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 1);
+  renderEventsList();
+});
+
+let pastEventsExpanded = false;
 
 function renderEventsList(){
   const container = document.getElementById('events-list');
+  document.getElementById('month-label-list').textContent = `${MONTHS[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
   if(eventsArray().length===0){
     container.innerHTML = `<div class="empty">Your calendar is empty.<br>Add your first event above.</div>`;
     return;
   }
-  const rangeStart = fmtDate(addDays(new Date(), -30));
-  const rangeEnd = fmtDate(addDays(new Date(), 180));
+  const first = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const last = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 0);
+  const rangeStart = fmtDate(first);
+  const rangeEnd = fmtDate(last);
   const occurrences = expandEventsInRange(rangeStart, rangeEnd);
   const sorted = occurrences.sort((a,b)=> (a.occurrenceDate+(a.time||'00:00')).localeCompare(b.occurrenceDate+(b.time||'00:00')));
   if(sorted.length===0){
-    container.innerHTML = `<div class="empty">Nothing scheduled in the next few months.</div>`;
+    container.innerHTML = `<div class="empty">Nothing scheduled in ${MONTHS[currentMonth.getMonth()]} ${currentMonth.getFullYear()}.</div>`;
     return;
   }
   const today = todayStr();
-  container.innerHTML = sorted.map(ev=>{
+  function cardWithBadge(ev){
     const [y,m,d] = ev.occurrenceDate.split('-');
     const isPast = ev.occurrenceDate < today;
     const cardHtml = eventCardHtml(ev, isPast ? 'past' : '');
-    // Inject the date badge into the action column by re-rendering the actions block manually
     return cardHtml.replace(
       '<div class="entry-actions">',
       `<div class="event-date-badge" style="margin-bottom:6px;">${MONTHS[parseInt(m)-1].slice(0,3)} ${parseInt(d)}</div><div class="entry-actions" style="flex-direction:row;">`
     );
-  }).join('');
+  }
+
+  const upcoming = sorted.filter(ev => ev.occurrenceDate >= today);
+  const past = sorted.filter(ev => ev.occurrenceDate < today);
+
+  let html = upcoming.length > 0
+    ? upcoming.map(cardWithBadge).join('')
+    : `<div class="empty" style="padding:8px 0; font-size:0.85rem;">Nothing upcoming this month.</div>`;
+
+  if(past.length > 0){
+    html += `
+      <button id="past-events-toggle" style="width:100%; display:flex; align-items:center; justify-content:center; gap:6px; background:none; border:none; padding:14px 4px; cursor:pointer; margin-top:10px; border-top:1px solid var(--border); font-family:'Inter',sans-serif; font-size:0.84rem; font-weight:600; color:var(--ink-soft);">
+        <span>Past events (${past.length})</span>
+        <span style="font-size:0.72rem; display:inline-block; ${pastEventsExpanded ? 'transform:rotate(180deg);' : ''}">▾</span>
+      </button>
+      <div id="past-events-list" style="display:${pastEventsExpanded ? 'block' : 'none'}; margin-top:8px;">
+        ${past.map(cardWithBadge).join('')}
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+  const toggleBtn = document.getElementById('past-events-toggle');
+  if(toggleBtn){
+    toggleBtn.addEventListener('click', ()=>{
+      pastEventsExpanded = !pastEventsExpanded;
+      renderEventsList();
+    });
+  }
 }
 
 document.addEventListener('click', async (e)=>{
