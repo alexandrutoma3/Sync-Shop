@@ -862,6 +862,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script src="native-auth-bundle.js" onerror="console.log('native-auth-bundle.js not present (expected on web)')"></script>
+<script src="native-fcm-bundle.js" onerror="console.log('native-fcm-bundle.js not present (expected on web)')"></script>
 <script>
 (function(){
   var manifest = {
@@ -898,7 +899,7 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 /* App version — increment the second decimal (e.g. 1.11 -> 1.12) on every update.
    Only bump the major/first-decimal number (e.g. 1.x -> 2.0) when explicitly requested. */
-const APP_VERSION = "1.43";
+const APP_VERSION = "1.44";
 
 let currentUser = null;
 let currentFamilyId = null;
@@ -1250,6 +1251,7 @@ auth.onAuthStateChanged(async (user)=>{
     checkNickname();
     const themeSnap = await db.ref(`users/${user.uid}/theme`).once('value');
     applyTheme(themeSnap.val() || 'default');
+    registerPushToken(user);
   } else {
     currentUser = null;
     currentFamilyId = null;
@@ -1262,6 +1264,22 @@ auth.onAuthStateChanged(async (user)=>{
     document.getElementById('main-app').style.display = 'none';
   }
 });
+
+async function registerPushToken(user){
+  const isNativeAndroid = window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'android';
+  if(!isNativeAndroid || !window.NativeFCM) return; // web: no push token step in this stage
+  try{
+    const token = await window.NativeFCM.requestPermissionAndGetToken();
+    if(token){
+      await db.ref(`users/${user.uid}/fcmTokens/${token}`).set({
+        platform: 'android',
+        updatedAt: Date.now()
+      });
+    }
+  }catch(err){
+    console.error('Push token registration failed:', err);
+  }
+}
 
 async function ensureUserProfile(user){
   const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
